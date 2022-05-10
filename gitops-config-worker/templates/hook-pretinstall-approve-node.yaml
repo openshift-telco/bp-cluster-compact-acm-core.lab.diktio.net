@@ -1,0 +1,63 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: hook-succeeded
+    #helm.sh/hook-weight: "-5"
+  name: preinstall-{{ $.Values.cluster.name }}-{{ $.Values.node.name }}-approve-node-job
+  namespace: {{ $.Values.global.gitops.namespace }}
+spec:
+  template:
+    spec:
+      dnsPolicy: ClusterFirst
+      restartPolicy: OnFailure
+      serviceAccount: {{ $.Values.global.gitops.service_account }}
+      serviceAccountName: {{ $.Values.global.gitops.service_account_name }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - image: {{ $.Values.global.gitops.hook_image }}
+          imagePullPolicy: IfNotPresent
+          name: {{ $.Values.cluster.name }}-{{ $.Values.node.name }}-approve-node-job
+          env:
+            - name: SLEEP
+              value: "15"
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Cluster Pre Install Hook"
+              APPROVED="false"
+              echo -n "Waiting for Service Account CSR."
+              while [ "$APPROVED" != "true" ]; do
+                sleep $SLEEP
+                echo -n "."
+                for csr in $( oc get csr | egrep "system\:serviceaccount" | egrep Pending | awk '{print $1}' )
+                  do if `oc get csr $csr -o jsonpath={...request}| base64 -d | openssl req -text -noout -verify -in - 2>&1 | egrep CN | egrep -q {{ $.Values.node.name }}`
+                    then 
+                      echo 
+                      oc --as=cluster-admin adm certificate approve $csr
+                      echo "Approved System Account CSR " $csr
+                      APPROVED="true"
+                    fi
+                done
+              done
+              APPROVED="false"
+              echo 
+              echo -n "Waiting for Node CSR."
+              while [ "$APPROVED" != "true" ]; do
+                sleep $SLEEP
+                echo -n "."
+                for csr in $( oc get csr | egrep "system\:node" | egrep Pending | awk '{print $1}' )
+                  do if `oc get csr $csr -o jsonpath={...request}| base64 -d | openssl req -text -noout -verify -in - 2>&1 | egrep CN | egrep -q {{ $.Values.node.name }}`
+                    then 
+                      echo
+                      oc --as=cluster-admin adm certificate approve $csr
+                      echo "Approved Node CSR " $csr
+                      APPROVED="true"
+                    fi
+                done
+              done
+              echo "All done! Hooray!"
+              sleep 60

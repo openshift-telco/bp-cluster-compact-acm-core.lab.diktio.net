@@ -1,0 +1,33 @@
+---
+apiVersion: hive.openshift.io/v1
+kind: ClusterDeployment
+metadata:
+  name: {{ $.Values.cluster.name }}
+  namespace: {{ $.Values.cluster.name }}
+spec:
+  baseDomain: {{ $.Values.global.domain }}
+  clusterName: {{ $.Values.cluster.name }}
+  controlPlaneConfig:
+    servingCertificates: {}
+  clusterInstallRef:
+    group: extensions.hive.openshift.io
+    kind: AgentClusterInstall
+    name: aci-{{ $.Values.cluster.name }}
+    version: v1beta1
+  platform:
+    agentBareMetal:
+      agentSelector:
+        matchLabels:
+          telco-core: core-{{ $.Values.cluster.name }}
+          #nfraenvs.agent-install.openshift.io: infraenv-{{ $.Values.cluster.name }}
+  pullSecretRef:
+    name: {{ $.Values.global.ai.pull_secret_name }}
+    # ACM 2.4.4 can only work with a cluster wide pull-secret, therefore removing this code that allowed the user to 
+    # deploy connected or disconnected on a per target cluster basis
+#{{- $mirror_name := (coalesce $.Values.cluster.install_mirror_name $.Values.global.mirror.install_mirror_name) -}}
+#{{- if (contains "mirror" $mirror_name) }}
+#    #need the global until ocp411 where oc adm cli will use the mirror registry mapping
+#    name: {{ $.Values.global.ai.pull_secret_name }}
+#{{- else }}
+#    name: {{ $.Values.global.ai.pull_secret_name }}-global
+#{{- end }}

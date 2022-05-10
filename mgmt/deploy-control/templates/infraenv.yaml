@@ -1,0 +1,37 @@
+---
+apiVersion: agent-install.openshift.io/v1beta1
+kind: InfraEnv
+metadata:
+  name: infraenv-{{ $.Values.cluster.name }}
+  namespace: {{ $.Values.cluster.name }}
+spec:
+  #agentLabelSelector:
+  #  matchLabels:
+  #    telco-core: core-{{ $.Values.cluster.name }}
+  additionalNTPSources:
+    - ntp.iinet.net
+  clusterRef:
+    name: {{ $.Values.cluster.name }}
+    namespace: {{ $.Values.cluster.name }}
+  ## (optional pub key)
+  sshAuthorizedKey: '{{ coalesce $.Values.cluster.ssh_key $.Values.global.ai.ssh_key }}'
+  pullSecretRef:
+    name: {{ $.Values.global.ai.pull_secret_name }}
+    # ACM 2.4.4 can only work with a cluster wide pull-secret, therefore removing this code that allowed the user to 
+    # deploy connected or disconnected on a per target cluster basis
+#{{- $mirror_name := (coalesce $.Values.cluster.install_mirror_name $.Values.global.mirror.install_mirror_name) -}}
+#{{- if (contains "mirror" $mirror_name) }}
+#    #need the global until ocp11 where oc adm cli will use the mirror registry mapping
+#    name: {{ $.Values.global.ai.pull_secret_name }}
+#{{- else }}
+#    name: {{ $.Values.global.ai.pull_secret_name }}-global
+#{{- end }}
+  # proxy:
+  #   httpProxy: http://11.11.11.33
+  #   httpsProxy: http://22.22.22.55
+  # Modify ignition during discovery
+  #ignitionConfigOverride: '{"ignition": {"version": "3.1.0"}, "storage": {"files": [{"path": "/etc/someconfig", "contents": {"source": "data:text/plain;base64,aGVscGltdHJhcHBlZGluYXN3YWdnZXJzcGVj"}}]}}'
+  ## Custom network configuration
+  nmStateConfigLabelSelector:
+    matchLabels:
+      cluster-name: {{ $.Values.cluster.name }}-nmstate

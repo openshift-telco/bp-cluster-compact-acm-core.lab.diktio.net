@@ -1,0 +1,19 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $.Values.global.gitops.service_account }}-{{ $.Values.cluster.name }}-adm-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: {{ $.Values.global.gitops.service_account }}
+    namespace: {{ $.Values.cluster.name }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $.Values.global.gitops.service_account }}
+  namespace: {{ $.Values.cluster.name }}

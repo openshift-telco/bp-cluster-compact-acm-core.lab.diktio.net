@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+ name: {{ $.Values.cluster.name }}-{{ $.Values.global.gitops.namespace }}-gitops-configs
+ namespace: {{ $.Values.global.gitops.namespace }}
+spec:
+  destination:
+    namespace: {{ $.Values.global.gitops.namespace }}
+    server: 'https://api.{{ $.Values.cluster.name }}.{{ $.Values.global.domain }}:6443'
+  project: default
+  source:
+    repoURL: '{{ $.Values.cluster.git_url }}'
+    path: bp-cluster/gitops-config
+    targetRevision: HEAD
+    helm:
+      valueFiles:
+      - "{{ $.Values.global.values_location }}"
+      - "{{ $.Values.mgmt.values_location }}"
+      - "/values.yaml"
+  syncPolicy:
+    automated:
+      allowEmpty: true
+      # prune: true
+      selfHeal: true
+    retry:
+      backoff:
+        duration: 1m
+        factor: 2
+        maxDuration: 3m
+      limit: -1
+    syncOptions:
+      - Validate=false
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

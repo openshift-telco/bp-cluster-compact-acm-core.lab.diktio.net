@@ -1,0 +1,47 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: hook-succeeded
+    #helm.sh/hook-weight: "-5"
+  name: postsync-csv-wait-patch-metal3-job
+  namespace: telco-gitops
+spec:
+  template:
+    spec:
+      dnsPolicy: ClusterFirst
+      restartPolicy: OnFailure
+      serviceAccount: {{ $.Values.global.gitops.service_account }}
+      serviceAccountName: {{ $.Values.global.gitops.service_account_name }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - image: registry.redhat.io/openshift-gitops-1/argocd-rhel8:v1.2.0
+          imagePullPolicy: IfNotPresent
+          #lab-registry.ocpsmc.lab.diktio.net/nsatsia/telco-toolbox:latest
+          #imagePullPolicy: Always
+          name: add-cluster-argo-repo-creds-job
+          env:
+            - name: SLEEP
+              value: "3"
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Cluster Pre-Install Repo-Creds Hook"
+              ARGOPW=$(oc get secret -n telco-gitops telco-gitops-cluster -o go-template='{{ "{{" }}index .data "admin.password"{{ "}}" }}' | base64 -d)
+              argocd --username=admin --password=$ARGOPW --insecure --config /tmp/config login telco-gitops-server-telco-gitops.apps.{{ $.Values.mgmt.name }}.{{ $.Values.global.domain }}
+              echo "#"
+              if `argocd repo list --config /tmp/config | egrep -q api.{{ $.Values.cluster.name }}.{{ $.Values.global.domain }}`; then
+                echo FOUND!  Deleting
+                argocd repo rm --config /tmp/config  {{ $.Values.cluster.git_url }}
+              fi
+              echo "#"  
+              sleep $SLEEP
+              argocd repo add --config /tmp/config {{ $.Values.cluster.git_url }} --username {{ $.Values.global.git_user }} --password {{ $.Values.global.git_token }}
+              argocd logout --config /tmp/config admin
+              rm -f /tmp/config 
+              echo "All done! Hooray!"
+              sleep 30
+

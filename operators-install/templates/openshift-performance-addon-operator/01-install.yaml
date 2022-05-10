@@ -1,0 +1,12 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: performance-addon-operator
+  namespace: openshift-operators
+spec:
+  channel: "4.10"
+  installPlanApproval: Automatic
+  name: performance-addon-operator
+  source: {{ coalesce $.Values.cluster.operator_source $.Values.global.mirror.operator_source }}
+  sourceNamespace: openshift-marketplace

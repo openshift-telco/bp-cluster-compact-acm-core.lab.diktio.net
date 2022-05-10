@@ -1,0 +1,69 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: hook-succeeded
+    #helm.sh/hook-weight: "-5"
+  name: preinstall-{{ $.Values.cluster.name }}-wait-{{ $.Values.node.name }}-label-annotate-job
+  namespace: {{ $.Values.global.gitops.namespace }}
+spec:
+  template:
+    spec:
+      dnsPolicy: ClusterFirst
+      restartPolicy: OnFailure
+      serviceAccount: {{ $.Values.global.gitops.service_account }}
+      serviceAccountName: {{ $.Values.global.gitops.service_account_name }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - image: {{ $.Values.global.gitops.hook_image }}
+          imagePullPolicy: IfNotPresent
+          name: {{ $.Values.cluster.name }}-{{ $.Values.node.name }}-wait-ready-label-annotate-job
+          env:
+            - name: SLEEP
+              value: "15"
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Cluster Pre Install Hook"
+              URL_READY="Pausing $SLEEP seconds..."
+              CSV_STATUS="Pausing $SLEEP seconds..."
+              while [ "$CSV_STATUS" != "Ready" ]; do
+                echo "Waiting for worker {{ $.Values.node.name }} to be ready. ($CSV_STATUS)"
+                sleep $SLEEP
+                CSV_STATUS=$( oc get nodes | egrep {{ $.Values.node.name }} | awk '{print $2}' )
+              done
+              # Labels
+              NODE_NAME=$(oc get nodes | egrep {{ $.Values.node.name }} | awk '{print $1}')
+              {{- range $key, $key_value := $.Values.node.node_labels }}
+                {{- if eq $key_value "" }}  
+              echo label: {{ $key }}={{ $key_value | squote }}
+              oc label node $NODE_NAME {{ $key }}={{ $key_value | squote }}
+              {{- else }}
+              oc label node $NODE_NAME {{ $key }}={{ $key_value }}
+                {{- end }}
+              {{- end }}
+              {{- if eq $.Values.node.ocs "true" }}
+              oc label node $NODE_NAME cluster.ocs.openshift.io/openshift-storage=''
+              {{- end }}
+              {{- if eq $.Values.node.lso "true" }}
+              oc label node $NODE_NAME ran.openshift.io/lso=''
+              {{- end }}
+              # Annotations
+              {{- range $key, $key_value := $.Values.node.node_annotations }}
+              echo annotation: {{ $key }}={{ $key_value | squote }}
+                {{- if eq (toString $key_value) "" }}  
+              oc annotate node $NODE_NAME {{ $key }}={{ $key_value | squote }}
+              {{- else }}
+                {{- if (regexFind " " $key_value) }}
+              oc annotate node $NODE_NAME {{ $key }}={{ $key_value | squote }}
+              {{- else }}
+              oc annotate node $NODE_NAME {{ $key }}={{ $key_value }}
+                  {{- end }}
+                {{- end }}
+              {{- end }}
+              echo "All done! Hooray!"
+              sleep $SLEEP

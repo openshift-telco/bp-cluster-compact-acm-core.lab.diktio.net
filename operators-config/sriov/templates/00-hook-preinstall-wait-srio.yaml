@@ -1,0 +1,40 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: hook-succeeded
+    #helm.sh/hook-weight: "-5"
+  name: preinstall-{{ $.Values.cluster.name }}-wait-sriov-job
+  namespace: {{ $.Values.global.gitops.namespace }}
+spec:
+  template:
+    spec:
+      dnsPolicy: ClusterFirst
+      restartPolicy: OnFailure
+      serviceAccount: {{ $.Values.global.gitops.service_account }}
+      serviceAccountName: {{ $.Values.global.gitops.service_account_name }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: {{ $.Values.cluster.name }}-wait-sriov-job
+          image: {{ $.Values.global.gitops.hook_image | quote }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SLEEP
+              value: "3"
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "SR-IOV PreInstall Hook"
+              CSV_NAME=$(oc get csv -n openshift-sriov-network-operator  | egrep sriov-network-operator | awk '{print $1}')
+              CSV_STATUS="Pausing $SLEEP seconds..."
+              while [ "$CSV_STATUS" != "InstallSucceeded" ]; do
+                echo "Waiting for the SR-IOV Operator to be ready. ($CSV_STATUS)"
+                sleep $SLEEP
+                CSV_STATUS=$( oc get csv -n openshift-sriov-network-operator $CSV_NAME -o jsonpath={..status.conditions[-1:].reason} )
+              done
+              echo "All done! Hooray!"
+
+

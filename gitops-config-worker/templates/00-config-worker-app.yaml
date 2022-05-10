@@ -1,0 +1,31 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: 'config-worker-{{ $.Values.cluster.name }}.{{ $.Values.global.domain }}-{{ $.Values.node.name }}'
+  namespace: {{ $.Values.global.gitops.namespace }}
+spec:
+  destination:
+    namespace: {{ $.Values.global.gitops.namespace }}
+    server: 'https://kubernetes.default.svc'
+  project: default
+  source:
+    repoURL: '{{ $.Values.cluster.git_url }}'
+    path: bp-common/node-profiles/{{ $.Values.node.technology }}/{{ $.Values.node.net_function }}/config
+    targetRevision: HEAD
+  syncPolicy:
+    automated:
+      allowEmpty: true
+      # prune: true
+      selfHeal: true
+    retry:
+      backoff:
+        duration: 1m
+        factor: 2
+        maxDuration: 3m
+      limit: -1
+    syncOptions:
+      - Validate=false
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

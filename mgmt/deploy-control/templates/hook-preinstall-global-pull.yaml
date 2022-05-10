@@ -1,0 +1,53 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: hook-succeeded
+    #helm.sh/hook-weight: "-5"
+  name: presync-set-global-pull-secret-job
+  namespace: {{ $.Values.cluster.name }}
+spec:
+  template:
+    spec:
+      dnsPolicy: ClusterFirst
+      restartPolicy: OnFailure
+      serviceAccount: {{ $.Values.global.gitops.service_account }}
+      serviceAccountName: {{ $.Values.global.gitops.service_account_name }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - image: {{ $.Values.global.gitops.hook_image }}
+          imagePullPolicy: IfNotPresent
+          name: set-global-pull-secret-job
+          env:
+            - name: SLEEP
+              value: "3"
+          command:
+            - /bin/bash
+            - -c
+            - |
+              #This hook set's a global pull secret to be used for clusters that either do not want to use the local registry 
+              # or there is no local registry. In the even that there is a local registry then merge it to the global secret
+              #
+              echo "Create global pull secret if needed"
+              sleep $SLEEP
+              if [ {{ $.Values.global.registry.url | quote }} = "" ]; then
+                oc get secret pull-secret -n openshift-config --template='{{ "{{" }}index .data ".dockerconfigjson" | base64decode{{ "}}" }}' > /tmp/ps.json
+                oc --as=cluster-admin create secret generic {{ $.Values.global.ai.pull_secret_name }} -n {{ $.Values.cluster.name }} --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/tmp/ps.json
+                #oc --as=cluster-admin create secret generic {{ $.Values.global.ai.pull_secret_name }}-global -n {{ $.Values.cluster.name }} --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/tmp/ps.json
+              else
+                host_fqdn={{ $.Values.global.registry.url | quote}}
+                b64auth=$( echo -n '{{ $.Values.global.registry.user }}:{{ $.Values.global.registry.password }}' | openssl base64 )
+                AUTHSTRING="{\"$host_fqdn\": {\"auth\": \"$b64auth\",\"email\": \"\"}}"
+                oc get secret pull-secret -n openshift-config --template='{{ "{{" }}index .data ".dockerconfigjson" | base64decode{{ "}}" }}' > /tmp/ps.json
+                #merge local registry creds into global
+                jq -c ".auths += $AUTHSTRING" < /tmp/ps.json > /tmp/ps-update.json
+                #cat /tmp/ps-update.json
+                oc --as=cluster-admin create secret generic {{ $.Values.global.ai.pull_secret_name }} -n {{ $.Values.cluster.name }} --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/tmp/ps-update.json
+                #oc --as=cluster-admin create secret generic {{ $.Values.global.ai.pull_secret_name }}-global -n {{ $.Values.cluster.name }} --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/tmp/ps-update.json
+              fi
+              rm -f /tmp/ps.json
+              rm -f /tmp/ps-update.json
+              echo "All done! Hooray!"
+              sleep 30
