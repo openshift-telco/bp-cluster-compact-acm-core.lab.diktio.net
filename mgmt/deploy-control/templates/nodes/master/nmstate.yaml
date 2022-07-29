@@ -13,6 +13,7 @@ spec:
 {{- $prefix := .prefix_length -}}
 {{- $bondname := .bond_name -}}
 {{- $bondmode := .bond_mode -}}
+{{- $bondmembers := .bond_members -}}
 {{- $intmtu := .int_mtu -}}
 {{- if eq (toString .bond_enable) "true" }}
   {{- range $index, $int := .interfaces }}
@@ -36,14 +37,14 @@ spec:
             primary: {{ $int.name | quote }}
           slaves:
     {{- end -}}
-    {{- if lt $index (int (toString (.bond_members))) }}  
+    {{- if lt $index (int (toString ($bondmembers))) }}  
           - {{ $int.name }}
     {{- end -}}
   {{- end -}}
   {{- range $index, $int := .interfaces }}
       - name: {{ $int.name }}
         type: ethernet
-    {{- if lt $index (int (toString (.bond_members))) }}  
+    {{- if lt $index (int (toString ($bondmembers))) }}  
         state: up
     {{- else }}
         state: down
